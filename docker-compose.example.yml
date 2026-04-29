@@ -1,0 +1,13 @@
+services:
+  plantbuddy:
+    build: .
+    container_name: plantbuddy
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./storage:/data/plantbuddy
+
+# Postgres is expected to be provided externally.
