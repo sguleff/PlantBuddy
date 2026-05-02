@@ -1,4 +1,5 @@
-FROM ghcr.io/cirruslabs/flutter:3.19.6 AS frontend-build
+ARG FLUTTER_IMAGE=ghcr.io/cirruslabs/flutter:stable
+FROM ${FLUTTER_IMAGE} AS frontend-build
 WORKDIR /src/frontend
 COPY frontend/pubspec.yaml frontend/analysis_options.yaml ./
 RUN flutter pub get
@@ -24,4 +25,5 @@ COPY docker/entrypoint.sh /app/docker/entrypoint.sh
 RUN chmod +x /app/docker/entrypoint.sh
 
 EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).read()"
 CMD ["/app/docker/entrypoint.sh"]

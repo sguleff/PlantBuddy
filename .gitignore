@@ -13,6 +13,7 @@ frontend/.packages
 
 storage/*
 !storage/.gitkeep
+backend/.tmp_storage/
 
 .env
 .env.*
