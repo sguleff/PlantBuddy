@@ -1,6 +1,6 @@
 services:
   plantbuddy:
-    build: .
+    image: plant-buddy:local
     container_name: plantbuddy
     restart: unless-stopped
     ports:
