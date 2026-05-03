@@ -32,6 +32,7 @@ MAX_UPLOAD_MB=25
 
 CORS_ALLOWED_ORIGINS=https://plantbuddy.a42.casa
 PUBLIC_BASE_URL=https://plantbuddy.a42.casa
+FRONTEND_API_BASE_URL=https://plantbuddy.a42.casa/api
 TRUSTED_HOSTS=plantbuddy.a42.casa,localhost,127.0.0.1
 ```
 

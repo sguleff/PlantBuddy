@@ -23,6 +23,7 @@
 | `MAX_UPLOAD_MB` | Maximum accepted image upload size. |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated trusted browser origins. |
 | `PUBLIC_BASE_URL` | Public app URL, for generated links and calendar export. |
+| `FRONTEND_API_BASE_URL` | API base URL injected into the Flutter app at runtime. Defaults to `http://127.0.0.1:8000/api`; set to `https://plantbuddy.a42.casa/api` for production. |
 | `TRUSTED_HOSTS` | Comma-separated hostnames accepted by the app. |
 
 ## Local Backend Check

@@ -35,6 +35,10 @@ class Settings(BaseSettings):
         validation_alias="CORS_ALLOWED_ORIGINS",
     )
     public_base_url: str = Field(default="http://localhost:8000", validation_alias="PUBLIC_BASE_URL")
+    frontend_api_base_url: str = Field(
+        default="http://127.0.0.1:8000/api",
+        validation_alias="FRONTEND_API_BASE_URL",
+    )
     trusted_hosts: str = Field(default="localhost,127.0.0.1", validation_alias="TRUSTED_HOSTS")
     secure_headers_enabled: bool = Field(default=True, validation_alias="SECURE_HEADERS_ENABLED")
     max_upload_mb: int = Field(default=25, validation_alias="MAX_UPLOAD_MB")

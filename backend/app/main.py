@@ -1,9 +1,10 @@
+import json
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.api.health import router as health_router
@@ -74,6 +75,13 @@ if frontend_dist.exists():
         static_path = frontend_dist / static_name
         if static_path.exists():
             app.mount(f"/{static_name}", StaticFiles(directory=static_path), name=static_name)
+
+
+@app.get("/plantbuddy_config.js", include_in_schema=False)
+def serve_frontend_config():
+    config = {"apiBaseUrl": settings.frontend_api_base_url}
+    content = f"window.PLANTBUDDY_CONFIG = {json.dumps(config)};"
+    return Response(content=content, media_type="application/javascript")
 
 
 @app.get("/{full_path:path}", include_in_schema=False)
