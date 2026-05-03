@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:html' as html;
+import 'dart:js_util' as js_util;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -111,8 +112,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _baseUrlController = TextEditingController(
-      text: html.window.localStorage['apiBaseUrl'] ?? defaultApiBaseUrl());
+  final _baseUrlController = TextEditingController(text: defaultApiBaseUrl());
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   String? _error;
@@ -3439,7 +3439,8 @@ Map<String, dynamic>? _firstMapById(List<dynamic> items, dynamic id) {
 
 class ApiClient {
   ApiClient() {
-    baseUrl = html.window.localStorage['apiBaseUrl'] ?? defaultApiBaseUrl();
+    html.window.localStorage.remove('apiBaseUrl');
+    baseUrl = defaultApiBaseUrl();
     _token = html.window.localStorage['accessToken'];
     _refreshToken = html.window.localStorage['refreshToken'];
   }
@@ -3460,6 +3461,7 @@ class ApiClient {
       logout();
       return false;
     }
+    baseUrl = defaultApiBaseUrl();
     return _refreshAccessToken();
   }
 
@@ -3484,7 +3486,6 @@ class ApiClient {
     _refreshToken = response['refresh_token'] as String;
     html.window.localStorage['accessToken'] = _token!;
     html.window.localStorage['refreshToken'] = _refreshToken!;
-    html.window.localStorage['apiBaseUrl'] = baseUrl;
   }
 
   Future<List<dynamic>> getList(String path) async {
@@ -3515,6 +3516,7 @@ class ApiClient {
 
   Future<Map<String, dynamic>> uploadFile(String path, html.File file,
       {bool retryOnUnauthorized = true}) async {
+    await _ensureAuthenticated();
     final formData = html.FormData()..appendBlob('file', file, file.name);
     final response = await html.HttpRequest.request(
       _url(path),
@@ -3522,8 +3524,7 @@ class ApiClient {
       requestHeaders: authHeaders,
       sendData: formData,
     );
-    if (_isUnauthorized(response) &&
-        retryOnUnauthorized) {
+    if (_isUnauthorized(response) && retryOnUnauthorized) {
       if (await _refreshAccessToken()) {
         return uploadFile(path, file, retryOnUnauthorized: false);
       }
@@ -3547,6 +3548,7 @@ class ApiClient {
     required ValueChanged<String> onDelta,
     bool retryOnUnauthorized = true,
   }) async {
+    await _ensureAuthenticated();
     final request = html.HttpRequest();
     var seen = 0;
     final completer = Completer<void>();
@@ -3603,14 +3605,14 @@ class ApiClient {
 
   Future<html.Blob> fetchBlob(String path,
       {bool retryOnUnauthorized = true}) async {
+    await _ensureAuthenticated();
     final response = await html.HttpRequest.request(
       _url(path),
       method: 'GET',
       requestHeaders: authHeaders,
       responseType: 'blob',
     );
-    if (_isUnauthorized(response) &&
-        retryOnUnauthorized) {
+    if (_isUnauthorized(response) && retryOnUnauthorized) {
       if (await _refreshAccessToken()) {
         return fetchBlob(path, retryOnUnauthorized: false);
       }
@@ -3629,14 +3631,14 @@ class ApiClient {
   }
 
   Future<void> downloadIcs(String path, {bool retryOnUnauthorized = true}) async {
+    await _ensureAuthenticated();
     final response = await html.HttpRequest.request(
       _url(path),
       method: 'GET',
       requestHeaders: authHeaders,
       responseType: 'blob',
     );
-    if (_isUnauthorized(response) &&
-        retryOnUnauthorized) {
+    if (_isUnauthorized(response) && retryOnUnauthorized) {
       if (await _refreshAccessToken()) {
         return downloadIcs(path, retryOnUnauthorized: false);
       }
@@ -3667,6 +3669,9 @@ class ApiClient {
       bool authenticated = true,
       bool allowEmpty = false,
       bool retryOnUnauthorized = true}) async {
+    if (authenticated) {
+      await _ensureAuthenticated();
+    }
     final headers = <String, String>{'Content-Type': 'application/json'};
     if (authenticated) {
       headers.addAll(authHeaders);
@@ -3677,9 +3682,7 @@ class ApiClient {
       requestHeaders: headers,
       sendData: body == null ? null : jsonEncode(body),
     );
-    if (authenticated &&
-        _isUnauthorized(response) &&
-        retryOnUnauthorized) {
+    if (authenticated && _isUnauthorized(response) && retryOnUnauthorized) {
       if (await _refreshAccessToken()) {
         return _request(method, path,
             body: body,
@@ -3720,6 +3723,16 @@ class ApiClient {
     }
   }
 
+  Future<void> _ensureAuthenticated() async {
+    if (_token != null && _token!.isNotEmpty && !_accessTokenExpiresSoon()) {
+      return;
+    }
+    if (await _refreshAccessToken()) {
+      return;
+    }
+    throw AuthExpiredException();
+  }
+
   Future<bool> _performRefresh() async {
     final refreshToken = _refreshToken;
     if (refreshToken == null || refreshToken.isEmpty) {
@@ -3755,6 +3768,30 @@ class ApiClient {
 
   bool _isUnauthorized(html.HttpRequest response) => response.status == 401;
 
+  bool _accessTokenExpiresSoon() {
+    final token = _token;
+    if (token == null || token.isEmpty) return true;
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return true;
+      final payload = jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+      ) as Map<String, dynamic>;
+      final exp = payload['exp'];
+      if (exp is! num) return true;
+      final expiresAt = DateTime.fromMillisecondsSinceEpoch(
+        exp.toInt() * 1000,
+        isUtc: true,
+      );
+      return DateTime.now()
+          .toUtc()
+          .add(const Duration(seconds: 90))
+          .isAfter(expiresAt);
+    } catch (_) {
+      return true;
+    }
+  }
+
   String _url(String path) {
     final root = baseUrl.trimRight();
     return path.startsWith('/') ? '$root$path' : '$root/$path';
@@ -3773,15 +3810,27 @@ class ApiClient {
 }
 
 String defaultApiBaseUrl() {
-  final location = html.window.location;
-  final hostname = location.hostname;
-  final origin = location.origin;
-  final isLocalHost = hostname == 'localhost' || hostname == '127.0.0.1';
-  final isFlutterDevServer = isLocalHost && location.port != '8000';
-  if (isFlutterDevServer) {
-    return 'http://127.0.0.1:8000/api';
+  const buildTimeApiBaseUrl = String.fromEnvironment('PLANTBUDDY_API_BASE_URL');
+  if (buildTimeApiBaseUrl.trim().isNotEmpty) {
+    return buildTimeApiBaseUrl.trim();
   }
-  return '$origin/api';
+  final runtimeApiBaseUrl = _runtimeConfigValue('apiBaseUrl');
+  if (runtimeApiBaseUrl != null && runtimeApiBaseUrl.trim().isNotEmpty) {
+    return runtimeApiBaseUrl.trim();
+  }
+  return 'http://127.0.0.1:8000/api';
+}
+
+String? _runtimeConfigValue(String key) {
+  try {
+    final config =
+        js_util.getProperty<Object?>(html.window, 'PLANTBUDDY_CONFIG');
+    if (config == null) return null;
+    final value = js_util.getProperty<Object?>(config, key);
+    return value?.toString();
+  } catch (_) {
+    return null;
+  }
 }
 
 class ApiException implements Exception {
