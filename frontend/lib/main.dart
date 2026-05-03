@@ -112,7 +112,6 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _baseUrlController = TextEditingController(text: defaultApiBaseUrl());
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   String? _error;
@@ -120,18 +119,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
-    _baseUrlController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
   Future<void> _login() async {
-    final apiBaseUrl = _baseUrlController.text.trim();
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
-    if (apiBaseUrl.isEmpty || username.isEmpty || password.isEmpty) {
-      setState(() => _error = 'API URL, username, and password are required.');
+    if (username.isEmpty || password.isEmpty) {
+      setState(() => _error = 'Username and password are required.');
       return;
     }
     setState(() {
@@ -139,7 +136,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
-      widget.api.baseUrl = apiBaseUrl;
+      widget.api.baseUrl = defaultApiBaseUrl();
       await widget.api.login(username, password);
       widget.onLoggedIn();
     } catch (error) {
@@ -197,14 +194,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: theme.textTheme.bodyMedium
                               ?.copyWith(color: theme.colorScheme.secondary)),
                       const SizedBox(height: 28),
-                      TextField(
-                        controller: _baseUrlController,
-                        autocorrect: false,
-                        decoration: const InputDecoration(
-                            labelText: 'API base URL',
-                            prefixIcon: Icon(Icons.link)),
-                      ),
-                      const SizedBox(height: 12),
                       TextField(
                         controller: _usernameController,
                         autofillHints: const [AutofillHints.username],
