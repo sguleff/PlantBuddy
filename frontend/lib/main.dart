@@ -5,10 +5,15 @@ import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:js_util' as js_util;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 void main() {
+  if (kIsWeb) {
+    BrowserContextMenu.disableContextMenu();
+  }
   runApp(const PlantBuddyApp());
 }
 
@@ -490,23 +495,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _deletePhoto(Map<String, dynamic> photo) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete photo?'),
-        content: const Text(
-            'This removes the photo and any health history generated from it.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Delete')),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
     try {
       await widget.api.delete('/photos/${photo['id']}');
       await _loadAll();
@@ -1507,6 +1495,11 @@ class _PhotoTimelineState extends State<_PhotoTimeline> {
                   : () => _goTo(_index + 1),
               icon: const Icon(Icons.chevron_right),
             ),
+            IconButton(
+              tooltip: 'Delete photo',
+              onPressed: () => _confirmDelete(current),
+              icon: const Icon(Icons.delete_outline),
+            ),
             TextButton.icon(
               onPressed: () => widget.onAnalyzePhoto(current),
               icon: const Icon(Icons.auto_awesome, size: 16),
@@ -1524,36 +1517,42 @@ class _PhotoTimelineState extends State<_PhotoTimeline> {
             itemBuilder: (context, index) {
               final photo = widget.photos[index] as Map<String, dynamic>;
               final selected = index == _index;
-              return InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: () => _goTo(index),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      width: selected ? 2 : 1,
-                      color: selected
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context).colorScheme.outlineVariant,
+              return GestureDetector(
+                onLongPressStart: (details) =>
+                    _showPhotoMenu(photo, details.globalPosition),
+                onSecondaryTapDown: (details) =>
+                    _showPhotoMenu(photo, details.globalPosition),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => _goTo(index),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        width: selected ? 2 : 1,
+                        color: selected
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.outlineVariant,
+                      ),
                     ),
-                  ),
-                  child: SizedBox(
-                    width: 74,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        AuthImage(
-                            api: widget.api,
-                            photoId: photo['id'] as String,
-                            height: 74),
-                        if (photo['is_registration_photo'] == true)
-                          const Positioned(
-                            right: 4,
-                            top: 4,
-                            child: Icon(Icons.verified,
-                                size: 16, color: Colors.white),
-                          ),
-                      ],
+                    child: SizedBox(
+                      width: 74,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          AuthImage(
+                              api: widget.api,
+                              photoId: photo['id'] as String,
+                              height: 74),
+                          if (photo['is_registration_photo'] == true)
+                            const Positioned(
+                              right: 4,
+                              top: 4,
+                              child: Icon(Icons.verified,
+                                  size: 16, color: Colors.white),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1589,6 +1588,28 @@ class _PhotoTimelineState extends State<_PhotoTimeline> {
       ],
     );
     if (action == 'delete') {
+      _confirmDelete(photo);
+    }
+  }
+
+  Future<void> _confirmDelete(Map<String, dynamic> photo) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete photo?'),
+        content: const Text(
+            'This removes the photo and any health history generated from it.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed == true) {
       widget.onDeletePhoto(photo);
     }
   }
