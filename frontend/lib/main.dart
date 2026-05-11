@@ -1347,7 +1347,10 @@ class _PlantDetail extends StatelessWidget {
               onPressed: onCreateTask,
               icon: const Icon(Icons.add_task_outlined)),
           child: _TaskList(
-              tasks: tasks, onComplete: onCompleteTask, onEdit: onEditTask),
+              tasks: tasks,
+              selectedPlant: plant,
+              onComplete: onCompleteTask,
+              onEdit: onEditTask),
         ),
         const SizedBox(height: 16),
         _Panel(title: 'Task History', child: _TaskHistory(events: taskEvents)),
@@ -2639,6 +2642,7 @@ class _TaskSection extends StatelessWidget {
           else
             ...tasks.map((task) => _TaskTile(
                 task: task,
+                plant: _plantById(plants, task['plant_id']),
                 plantName: _plantName(plants, task['plant_id']),
                 onComplete: onComplete,
                 onEdit: onEdit,
@@ -2683,6 +2687,7 @@ class _TaskLocationGroup extends StatelessWidget {
           ),
           ...tasks.map((task) => _TaskTile(
                 task: task,
+                plant: _plantById(plants, task['plant_id']),
                 plantName: _plantName(plants, task['plant_id']),
                 onComplete: onComplete,
                 onEdit: onEdit,
@@ -2696,9 +2701,15 @@ class _TaskLocationGroup extends StatelessWidget {
 
 class _TaskList extends StatelessWidget {
   const _TaskList(
-      {required this.tasks, required this.onComplete, required this.onEdit});
+      {required this.tasks,
+      this.plants = const [],
+      this.selectedPlant,
+      required this.onComplete,
+      required this.onEdit});
 
   final List<dynamic> tasks;
+  final List<dynamic> plants;
+  final Map<String, dynamic>? selectedPlant;
   final ValueChanged<Map<String, dynamic>> onComplete;
   final ValueChanged<Map<String, dynamic>> onEdit;
 
@@ -2712,10 +2723,19 @@ class _TaskList extends StatelessWidget {
     }
     return Column(
         children: tasks
-            .map((task) => _TaskTile(
-                task: task as Map<String, dynamic>,
-                onComplete: onComplete,
-                onEdit: onEdit))
+            .map((task) {
+              final mapped = task as Map<String, dynamic>;
+              final plant = selectedPlant ??
+                  _plantById(plants, mapped['plant_id']);
+              return _TaskTile(
+                  task: mapped,
+                  plant: plant,
+                  plantName: selectedPlant == null
+                      ? _plantName(plants, mapped['plant_id'])
+                      : selectedPlant?['pet_name']?.toString(),
+                  onComplete: onComplete,
+                  onEdit: onEdit);
+            })
             .toList());
   }
 }
@@ -2725,10 +2745,12 @@ class _TaskTile extends StatelessWidget {
       {required this.task,
       required this.onComplete,
       required this.onEdit,
+      this.plant,
       this.plantName,
       this.forceOverdue = false});
 
   final Map<String, dynamic> task;
+  final Map<String, dynamic>? plant;
   final String? plantName;
   final ValueChanged<Map<String, dynamic>> onComplete;
   final ValueChanged<Map<String, dynamic>> onEdit;
@@ -2747,8 +2769,11 @@ class _TaskTile extends StatelessWidget {
         'Every ${task['frequency_days']} days',
     ];
     return ListTile(
-      leading: Icon(_taskIcon(task['task_type'] as String?),
-          color: overdue ? Theme.of(context).colorScheme.error : null),
+      minLeadingWidth: 72,
+      leading: _TaskPlantMarker(
+          plant: plant,
+          taskType: task['task_type'] as String?,
+          overdue: overdue),
       title: Text(task['title'] ?? '',
           style: TextStyle(
               color: overdue ? Theme.of(context).colorScheme.error : null,
@@ -2767,6 +2792,110 @@ class _TaskTile extends StatelessWidget {
               onPressed: () => onComplete(task),
               icon: const Icon(Icons.check_circle_outline)),
         ],
+      ),
+    );
+  }
+}
+
+class _TaskPlantMarker extends StatelessWidget {
+  const _TaskPlantMarker(
+      {required this.plant, required this.taskType, required this.overdue});
+
+  final Map<String, dynamic>? plant;
+  final String? taskType;
+  final bool overdue;
+
+  @override
+  Widget build(BuildContext context) {
+    final errorColor = Theme.of(context).colorScheme.error;
+    return SizedBox(
+      width: 72,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(_taskIcon(taskType), color: overdue ? errorColor : null),
+          const SizedBox(width: 10),
+          _TaskPlantThumb(plant: plant),
+        ],
+      ),
+    );
+  }
+}
+
+class _TaskPlantThumb extends StatefulWidget {
+  const _TaskPlantThumb({required this.plant});
+
+  final Map<String, dynamic>? plant;
+
+  @override
+  State<_TaskPlantThumb> createState() => _TaskPlantThumbState();
+}
+
+class _TaskPlantThumbState extends State<_TaskPlantThumb> {
+  String? _objectUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TaskPlantThumb oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.plant?['id'] != widget.plant?['id'] ||
+        oldWidget.plant?['latest_photo_id'] != widget.plant?['latest_photo_id']) {
+      _revoke();
+      _load();
+    }
+  }
+
+  @override
+  void dispose() {
+    _revoke();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final plant = widget.plant;
+    final photoId = plant?['latest_photo_id'];
+    if (photoId == null || photoId.toString().isEmpty) return;
+    try {
+      final blob = await ApiClient().fetchPhotoBlob(photoId.toString(), 'thumb_256');
+      if (!mounted) return;
+      setState(() => _objectUrl = html.Url.createObjectUrlFromBlob(blob));
+    } catch (_) {}
+  }
+
+  void _revoke() {
+    final url = _objectUrl;
+    if (url != null) {
+      html.Url.revokeObjectUrl(url);
+    }
+    _objectUrl = null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final plant = widget.plant;
+    final url = _objectUrl;
+    if (url != null) {
+      return ClipOval(
+        child: Image.network(url, width: 28, height: 28, fit: BoxFit.cover),
+      );
+    }
+    return Container(
+      width: 28,
+      height: 28,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Theme.of(context).colorScheme.primaryContainer,
+      ),
+      child: Icon(
+        (plant?['location'] == 'outdoor') ? Icons.yard_outlined : Icons.home_outlined,
+        size: 16,
+        color: Theme.of(context).colorScheme.primary,
       ),
     );
   }
